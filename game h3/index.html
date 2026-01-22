@@ -1,0 +1,1465 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>NO EXIT — mini horror</title>
+  <style>
+    :root{
+      --bg:#000;
+
+      /* UI colors are driven by JS (fade to white in NO_EXIT) */
+      --ui:#ff2a2a;
+      --ui2:#ff5a5a;
+      --uiMuted: rgba(255,80,80,.85);
+      --uiLabel: rgba(255,80,80,.65);
+      --uiBorder: rgba(255,40,40,.35);
+      --hudBg: rgba(0,0,0,.35);
+      --btnBg: rgba(0,0,0,.35);
+      --shadow: rgba(255,0,0,.10);
+    }
+
+    html,body{height:100%; margin:0; background:var(--bg); overflow:hidden;}
+    body{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      color: var(--ui);
+      letter-spacing: .5px;
+    }
+    canvas{display:block; width:100vw; height:100vh; image-rendering: pixelated;}
+
+    .hud{
+      position:fixed; left:12px; top:12px; z-index:5;
+      padding:10px 12px;
+      background: var(--hudBg);
+      border:1px solid var(--uiBorder);
+      border-radius: 10px;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 0 24px var(--shadow);
+      user-select:none;
+    }
+    .hud .row{display:flex; gap:12px; align-items:baseline; flex-wrap:wrap}
+    .hud .label{color:var(--uiLabel); font-size:12px}
+    .hud .value{font-size:14px; text-shadow: 0 0 10px rgba(0,0,0,.25)}
+    .hud .big{font-size:18px}
+    .hud .sep{opacity:.35}
+
+    .diff{
+      padding:2px 8px;
+      border-radius: 999px;
+      border:1px solid var(--uiBorder);
+      background: rgba(0,0,0,.25);
+      text-transform: uppercase;
+      font-weight: 900;
+      font-size: 12px;
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+    }
+    .diff .dot{
+      width:8px; height:8px; border-radius:99px;
+      background: var(--ui);
+      box-shadow: 0 0 12px rgba(0,0,0,.25);
+    }
+    .easy { filter: saturate(1.0); }
+    .normal{ filter: saturate(1.2) contrast(1.05); }
+    .hard  { filter: saturate(1.35) contrast(1.10); }
+    .nightmare{ filter: saturate(1.6) contrast(1.20) hue-rotate(-8deg); }
+
+    .controls{
+      position:fixed; left:0; right:0; bottom:0; z-index:6;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      display:flex; justify-content:space-between; gap:10px;
+      pointer-events:none;
+    }
+    .controls .group{display:flex; gap:10px; pointer-events:auto;}
+    button{
+      border:1px solid var(--uiBorder);
+      background: var(--btnBg);
+      color: var(--ui);
+      border-radius: 12px;
+      padding: 12px 14px;
+      font: inherit;
+      font-weight: 900;
+      letter-spacing: .6px;
+      text-transform: uppercase;
+      box-shadow: 0 0 18px var(--shadow);
+      backdrop-filter: blur(4px);
+      cursor:pointer;
+      user-select:none;
+      touch-action: manipulation;
+    }
+    button:active{ transform: translateY(1px); }
+    button small{display:block; opacity:.75; font-weight:700; text-transform:none; letter-spacing:0; margin-top:4px}
+    .btn-muted{opacity:.75}
+
+    .hint{
+      position:fixed; right:12px; top:12px; z-index:5;
+      padding:10px 12px;
+      background: rgba(0,0,0,.20);
+      border:1px solid var(--uiBorder);
+      border-radius: 10px;
+      backdrop-filter: blur(4px);
+      max-width: 360px;
+      font-size: 12px;
+      color: var(--uiMuted);
+      user-select:none;
+    }
+    .hint kbd{
+      padding:2px 6px;
+      border:1px solid var(--uiBorder);
+      border-radius:6px;
+      background: rgba(0,0,0,.25);
+      color: var(--uiMuted);
+      font-weight:900;
+    }
+
+    .centerText{
+      position:fixed; inset:0; z-index:7;
+      display:none; align-items:center; justify-content:center;
+      text-align:center;
+      pointer-events:none;
+      padding: 24px;
+    }
+    .centerText .box{
+      max-width: 900px;
+      padding: 20px 22px;
+      border-radius: 16px;
+      border: 1px solid var(--uiBorder);
+      background: rgba(0,0,0,.35);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 0 40px var(--shadow);
+    }
+    .centerText h1{
+      margin:0 0 8px;
+      font-size: 24px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      text-shadow: 0 0 18px rgba(0,0,0,.25);
+    }
+    .centerText p{margin: 8px 0; color: var(--uiMuted); font-size: 13px; line-height:1.55}
+    .centerText .sub{opacity:.75}
+
+    .loopCounter{
+      position:fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 12;
+      font-weight: 1000;
+      font-size: 30px;
+      letter-spacing: 2px;
+      color: rgba(255,255,255,.92);
+      text-shadow: 0 0 24px rgba(0,0,0,.45);
+      display:none;
+      user-select:none;
+      pointer-events:none;
+      text-align:center;
+      white-space:nowrap;
+    }
+    .loopCounter .by{
+      display:block;
+      font-size: 12px;
+      letter-spacing: 3px;
+      font-weight: 900;
+      opacity: .75;
+      margin-top: 6px;
+    }
+
+    @media (max-width:720px){
+      .hint{display:none;}
+      button{padding: 12px 12px;}
+      .loopCounter{font-size:26px;}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="hud" id="hud">
+    <div class="row">
+      <div><span class="label">DEATHS</span> <span class="value big" id="deaths">0/99</span></div>
+      <span class="sep">|</span>
+      <div><span class="label">KILLS</span> <span class="value big" id="kills">0</span> <span class="label">/ 99</span></div>
+      <span class="sep">|</span>
+      <div class="diff easy" id="diffBadge"><span class="dot"></span><span id="diffText">EASY</span></div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div><span class="label">MELEE</span> <span class="value" id="cdM">ready</span></div>
+      <span class="sep">|</span>
+      <div><span class="label">RANGED</span> <span class="value" id="cdR">ready</span></div>
+      <span class="sep">|</span>
+      <div><span class="label">NIGHTMARE LVL</span> <span class="value" id="nlvl">0</span></div>
+    </div>
+  </div>
+
+  <div class="hint" id="hint">
+    <div style="margin-bottom:6px; font-weight:900; letter-spacing:1px;">CONTROLS</div>
+    <div>Move: <kbd>A</kbd>/<kbd>D</kbd> or <kbd>←</kbd>/<kbd>→</kbd></div>
+    <div>Knife: <kbd>J</kbd> (fast)</div>
+    <div>Pistol: <kbd>K</kbd> (slower)</div>
+    <div class="sub" style="margin-top:6px; opacity:.7;">One touch from a mob = death. One hit = mob dies.</div>
+  </div>
+
+  <div class="centerText" id="centerText">
+    <div class="box">
+      <h1 id="centerTitle">NO EXIT</h1>
+      <p id="centerBody">...</p>
+      <p class="sub" id="centerSub">...</p>
+    </div>
+  </div>
+
+  <div class="loopCounter" id="loopCounter">
+    <div id="loopDeaths">99</div>
+    <span class="by">MADE BY YAWYNA</span>
+  </div>
+
+  <div class="controls" id="controls">
+    <div class="group">
+      <button id="btnLeft">←<small>move</small></button>
+      <button id="btnRight">→<small>move</small></button>
+    </div>
+    <div class="group">
+      <button id="btnKnife">Knife<small>melee</small></button>
+      <button id="btnGun">Gun<small>ranged</small></button>
+      <button id="btnMute" class="btn-muted">Sound: ON</button>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const GOAL_KILLS = 99;
+  const MAX_DEATHS = 99;
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  let W = 0, H = 0, DPR = 1;
+
+  function resize(){
+    DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    W = Math.floor(innerWidth * DPR);
+    H = Math.floor(innerHeight * DPR);
+    canvas.width = W;
+    canvas.height = H;
+  }
+  addEventListener('resize', resize, { passive:true });
+  resize();
+
+  const deathsEl = document.getElementById('deaths');
+  const killsEl  = document.getElementById('kills');
+  const cdMEl    = document.getElementById('cdM');
+  const cdREl    = document.getElementById('cdR');
+  const diffText = document.getElementById('diffText');
+  const diffBadge= document.getElementById('diffBadge');
+  const nlvlEl   = document.getElementById('nlvl');
+
+  const hud = document.getElementById('hud');
+  const controls = document.getElementById('controls');
+  const hint = document.getElementById('hint');
+
+  const centerText = document.getElementById('centerText');
+  const centerTitle= document.getElementById('centerTitle');
+  const centerBody = document.getElementById('centerBody');
+  const centerSub  = document.getElementById('centerSub');
+
+  const loopCounter = document.getElementById('loopCounter');
+  const loopDeathsEl= document.getElementById('loopDeaths');
+
+  // UI whitening
+  const UI_FROM = { r:255, g:42,  b:42  };
+  const UI_TO   = { r:255, g:255, b:255 };
+  function lerp(a,b,t){ return a + (b-a)*t; }
+  function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+  function setUIWhiteness(w){
+    const t = clamp(w, 0, 1);
+    const r = Math.round(lerp(UI_FROM.r, UI_TO.r, t));
+    const g = Math.round(lerp(UI_FROM.g, UI_TO.g, t));
+    const b = Math.round(lerp(UI_FROM.b, UI_TO.b, t));
+
+    const mutedR = Math.round(lerp(255, 235, t));
+    const mutedG = Math.round(lerp(80,  235, t));
+    const mutedB = Math.round(lerp(80,  235, t));
+
+    const labelA = lerp(0.65, 0.85, t);
+    const mutedA = lerp(0.85, 0.95, t);
+
+    const borderA = lerp(0.35, 0.55, t);
+    const bgA = lerp(0.35, 0.10, t);
+    const btnA = lerp(0.35, 0.10, t);
+    const shadowA = lerp(0.10, 0.06, t);
+
+    const root = document.documentElement.style;
+    root.setProperty('--ui', `rgb(${r},${g},${b})`);
+    root.setProperty('--ui2', `rgb(${Math.min(255,r+10)},${Math.min(255,g+10)},${Math.min(255,b+10)})`);
+    root.setProperty('--uiMuted', `rgba(${mutedR},${mutedG},${mutedB},${mutedA})`);
+    root.setProperty('--uiLabel', `rgba(${mutedR},${mutedG},${mutedB},${labelA})`);
+    root.setProperty('--uiBorder', `rgba(${r},${g},${b},${borderA})`);
+    root.setProperty('--hudBg', `rgba(0,0,0,${bgA})`);
+    root.setProperty('--btnBg', `rgba(0,0,0,${btnA})`);
+    root.setProperty('--shadow', `rgba(0,0,0,${shadowA})`);
+  }
+  setUIWhiteness(0);
+
+  /* =========================
+     Audio (louder ambient noise)
+  ========================== */
+  let audioCtx = null;
+  let master = null;
+  let ambientGain = null;
+  let sfxGain = null;
+  let ambientFilter = null;
+  let soundOn = true;
+
+  function ensureAudio(){
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    master = audioCtx.createGain();
+    master.gain.value = 0.95;
+    master.connect(audioCtx.destination);
+
+    ambientGain = audioCtx.createGain();
+    ambientGain.gain.value = 0.0;
+    ambientGain.connect(master);
+
+    sfxGain = audioCtx.createGain();
+    sfxGain.gain.value = 1.0;
+    sfxGain.connect(master);
+
+    // Noise source (loop)
+    const noise = audioCtx.createBufferSource();
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i=0;i<data.length;i++) data[i] = (Math.random()*2-1) * 0.14; // louder
+    noise.buffer = buffer;
+    noise.loop = true;
+
+    ambientFilter = audioCtx.createBiquadFilter();
+    ambientFilter.type = 'lowpass';
+    ambientFilter.frequency.value = 420;
+
+    const hum = audioCtx.createOscillator();
+    hum.type = 'sine';
+    hum.frequency.value = 42;
+
+    const humGain = audioCtx.createGain();
+    humGain.gain.value = 0.08; // louder hum
+
+    noise.connect(ambientFilter);
+    ambientFilter.connect(ambientGain);
+
+    hum.connect(humGain);
+    humGain.connect(ambientGain);
+
+    noise.start();
+    hum.start();
+  }
+
+  function setAmbientLevel(v){
+    if (!audioCtx) return;
+    const t = audioCtx.currentTime;
+    ambientGain.gain.cancelScheduledValues(t);
+    ambientGain.gain.linearRampToValueAtTime(v, t + 0.08);
+  }
+
+  function makeDistCurve(k=4.0){
+    const n=1024, curve=new Float32Array(n);
+    for (let i=0;i<n;i++){
+      const x = (i/(n-1))*2 - 1;
+      curve[i] = Math.tanh(k*x);
+    }
+    return curve;
+  }
+
+  function sfx(type, intensity=1){
+    if (!soundOn) return;
+    ensureAudio();
+    const t = audioCtx.currentTime;
+
+    if (type === 'hit'){
+      const osc = audioCtx.createOscillator();
+      osc.type = 'square';
+      osc.frequency.value = 760;
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16 * intensity, t + 0.005);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+      osc.connect(g); g.connect(sfxGain);
+      osc.start(t); osc.stop(t + 0.07);
+      return;
+    }
+
+    if (type === 'death'){
+      const osc = audioCtx.createOscillator();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(120, t);
+      osc.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.65 * intensity, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+
+      osc.connect(g); g.connect(sfxGain);
+      osc.start(t); osc.stop(t + 0.24);
+      return;
+    }
+
+    if (type === 'nightmare_stage'){
+      const sub = audioCtx.createOscillator();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(64, t);
+      sub.frequency.exponentialRampToValueAtTime(26, t + 0.35);
+
+      const subG = audioCtx.createGain();
+      subG.gain.setValueAtTime(0.0001, t);
+      subG.gain.exponentialRampToValueAtTime(0.70 * intensity, t + 0.02);
+      subG.gain.exponentialRampToValueAtTime(0.0001, t + 0.40);
+
+      sub.connect(subG); subG.connect(sfxGain);
+      sub.start(t); sub.stop(t + 0.45);
+
+      const osc = audioCtx.createOscillator();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(240, t);
+      osc.frequency.exponentialRampToValueAtTime(980, t + 0.18);
+      osc.frequency.exponentialRampToValueAtTime(320, t + 0.46);
+
+      const dist = audioCtx.createWaveShaper();
+      dist.curve = makeDistCurve(5.4);
+
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.80 * intensity, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 760;
+      bp.Q.value = 7;
+
+      osc.connect(dist); dist.connect(bp); bp.connect(g); g.connect(sfxGain);
+      osc.start(t); osc.stop(t + 0.6);
+      return;
+    }
+
+    if (type === 'screamer'){
+      const osc1 = audioCtx.createOscillator();
+      osc1.type = 'sawtooth';
+      osc1.frequency.setValueAtTime(220, t);
+      osc1.frequency.exponentialRampToValueAtTime(3000, t + 0.10);
+      osc1.frequency.exponentialRampToValueAtTime(520,  t + 0.42);
+
+      const osc2 = audioCtx.createOscillator();
+      osc2.type = 'square';
+      osc2.frequency.setValueAtTime(330, t);
+      osc2.frequency.exponentialRampToValueAtTime(3600, t + 0.12);
+      osc2.frequency.exponentialRampToValueAtTime(640,  t + 0.40);
+
+      const dist = audioCtx.createWaveShaper();
+      dist.curve = makeDistCurve(7.0);
+
+      const hp = audioCtx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 520;
+
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(1.5 * intensity, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.55);
+
+      osc1.connect(dist);
+      osc2.connect(dist);
+      dist.connect(hp);
+      hp.connect(g);
+      g.connect(sfxGain);
+
+      osc1.start(t); osc2.start(t);
+      osc1.stop(t + 0.6); osc2.stop(t + 0.6);
+      return;
+    }
+  }
+
+  const btnMute = document.getElementById('btnMute');
+  btnMute.addEventListener('click', () => {
+    soundOn = !soundOn;
+    btnMute.textContent = soundOn ? 'Sound: ON' : 'Sound: OFF';
+    btnMute.classList.toggle('btn-muted', !soundOn);
+    if (!soundOn && audioCtx) setAmbientLevel(0);
+    else ensureAudio();
+  }, { passive:true });
+
+  /* =========================
+     Input (fix A/D/J/K)
+  ========================== */
+  const keys = new Set();
+
+  function keyNorm(e){
+    // Prefer .code for layout-safe controls
+    // KeyA, KeyD, KeyJ, KeyK
+    return e.code || e.key;
+  }
+
+  addEventListener('keydown', (e) => {
+    ensureAudio();
+    const k = keyNorm(e);
+
+    // prevent scroll / focus issues
+    const prevent = [
+      'ArrowLeft','ArrowRight','KeyA','KeyD','KeyJ','KeyK','KeyR',
+      'a','d','j','k','A','D','J','K','r','R'
+    ];
+    if (prevent.includes(k) || prevent.includes(e.key)) e.preventDefault();
+
+    keys.add(k);
+
+    if (k === 'KeyJ') tryMelee();
+    if (k === 'KeyK') tryRanged();
+  }, { passive:false });
+
+  addEventListener('keyup', (e) => {
+    keys.delete(keyNorm(e));
+  }, { passive:true });
+
+  const btnLeft  = document.getElementById('btnLeft');
+  const btnRight = document.getElementById('btnRight');
+  const btnKnife = document.getElementById('btnKnife');
+  const btnGun   = document.getElementById('btnGun');
+
+  const touchHold = { left:false, right:false };
+  function bindHold(btn, dir){
+    const on = () => { ensureAudio(); touchHold[dir]=true; };
+    const off= () => { touchHold[dir]=false; };
+    btn.addEventListener('pointerdown', on);
+    btn.addEventListener('pointerup', off);
+    btn.addEventListener('pointercancel', off);
+    btn.addEventListener('pointerleave', off);
+  }
+  bindHold(btnLeft,'left');
+  bindHold(btnRight,'right');
+  btnKnife.addEventListener('click', () => { ensureAudio(); tryMelee(); });
+  btnGun.addEventListener('click', () => { ensureAudio(); tryRanged(); });
+
+  /* =========================
+     Game state
+  ========================== */
+  const STATE = { PLAY:'play', NO_EXIT:'no_exit', SCREAMER:'screamer', DEATH_LOOP:'death_loop', WIN:'win' };
+  let state = STATE.PLAY;
+
+  const world = { t:0, dt:0, shake:0, glitch:0, whiteness:0, vignette:0, vignetteType:0, loopSpeed:1 };
+
+  const player = { x:0, vx:0, facing:1, meleeCD:0, rangedCD:0, meleeAnim:0, gunAnim:0 };
+
+  let deaths = 0;
+  let kills = 0;
+
+  // Time difficulty steps (0..3) still exist, but we override the starting step based on nightmareLevel (per request).
+  const DIFF_NAMES = ['EASY','NORMAL','HARD','NIGHTMARE'];
+  const DIFF_CLASS = ['easy','normal','hard','nightmare'];
+  let diffStep = 0;
+  let diffTimer = 0;
+  const diffStepSeconds = 5;
+  const diffMaxStep = 3;
+
+  let prevNightmareLevel = 0;
+  function nightmareLevel(){ return Math.floor(deaths / 10); }
+
+  const mobs = [];
+  const bullets = [];
+
+  let spawnAccum = 0;
+  let spawnBaseInterval = 1.10; // a bit more aggressive
+  let mobBaseSpeed = 110;       // faster baseline
+  const cam = { x:0, y:0 };
+
+  function resetRunToEasy(){
+    diffTimer = 0;
+    spawnAccum = 0;
+    spawnBaseInterval = 1.10;
+    mobBaseSpeed = 110;
+
+    // IMPORTANT: starting difficulty depends on nightmare level:
+    // nl 0: start HARD (not easy)
+    // nl 2+: start NIGHTMARE
+    // nl 1: also start HARD (as requested "0->1 starts hard"; and "0 itself is closer spawn")
+    const nl = nightmareLevel();
+    diffStep = (nl >= 2) ? 3 : 2; // 2=HARD, 3=NIGHTMARE
+  }
+
+  function resetAfterDeath(){
+    mobs.length = 0;
+    bullets.length = 0;
+    kills = 0;
+    player.x = 0;
+    player.vx = 0;
+    player.facing = 1;
+    player.meleeCD = 0;
+    player.rangedCD = 0;
+    player.meleeAnim = 0;
+    player.gunAnim = 0;
+    resetRunToEasy();
+  }
+
+  function setUIVisibilityForState(){
+    const inLoop = (state === STATE.DEATH_LOOP);
+    hud.style.display = inLoop ? 'none' : 'block';
+    controls.style.display = inLoop ? 'none' : 'flex';
+    hint.style.display = inLoop ? 'none' : (window.innerWidth <= 720 ? 'none' : 'block');
+    loopCounter.style.display = inLoop ? 'block' : 'none';
+  }
+
+  function updateHUD(){
+    deathsEl.textContent = `${Math.min(deaths, MAX_DEATHS)}/${MAX_DEATHS}`;
+    killsEl.textContent = String(kills);
+
+    nlvlEl.textContent = String(nightmareLevel());
+
+    cdMEl.textContent = player.meleeCD <= 0 ? 'ready' : (player.meleeCD).toFixed(2)+'s';
+    cdREl.textContent = player.rangedCD <= 0 ? 'ready' : (player.rangedCD).toFixed(2)+'s';
+
+    diffText.textContent = DIFF_NAMES[diffStep];
+    diffBadge.classList.remove(...DIFF_CLASS);
+    diffBadge.classList.add(DIFF_CLASS[diffStep]);
+  }
+
+  /* =========================
+     Spawning rules per nightmare level (requested extremes)
+  ========================== */
+  function spawnParamsForNightmare(nl){
+    // distances are expressed as fractions of screen width baseline distance
+    // Level 0: 30% closer
+    // Level 1: very close
+    // Level 2: extremely close
+    // Level 3+: point blank, and "mess" (many)
+    if (nl <= 0) return { distMult: 0.70, nearMode:false, burst: {min:1,max:2}, speedMult: 1.00 };
+    if (nl === 1) return { distMult: 0.22, nearMode:true,  burst: {min:2,max:4}, speedMult: 1.10 };
+    if (nl === 2) return { distMult: 0.12, nearMode:true,  burst: {min:3,max:6}, speedMult: 1.20 };
+    return            { distMult: 0.06, nearMode:true,  burst: {min:6,max:12}, speedMult: 1.35 };
+  }
+
+  function spawnMob(){
+    const nl = nightmareLevel();
+    const sp = spawnParamsForNightmare(nl);
+
+    const side = Math.random() < 0.5 ? -1 : 1;
+
+    // baseline "spawn ring"
+    const baseDistance = (W / DPR) * (0.60 + Math.random()*0.55);
+    let distance = baseDistance * sp.distMult;
+
+    // near mode clamps even harder
+    if (sp.nearMode){
+      const tight = (W / DPR) * (sp.distMult + Math.random()*(sp.distMult*0.5));
+      distance = Math.min(distance, tight);
+    }
+
+    const x = player.x + side * distance;
+
+    // speed scaling:
+    // +10% per nightmare level (global rule) AND additional per-level extreme tuning above
+    const stepMult = 1 + diffStep * 0.18;
+    const nlSpeedMult = (1 + nl * 0.10) * sp.speedMult;
+    const speed = mobBaseSpeed * stepMult * nlSpeedMult * (0.90 + Math.random()*0.30);
+
+    const baseScale = 1.0 + Math.min(1.6, nl * 0.12) + diffStep * 0.06;
+    const deform = Math.min(1.4, nl * 0.12);
+
+    mobs.push({
+      x,
+      speed,
+      scale: baseScale,
+      deform,
+      phase: Math.random()*Math.PI*2,
+      tint: 0.6 + Math.random()*0.4
+    });
+  }
+
+  function killMob(i){
+    mobs.splice(i,1);
+    kills++;
+    sfx('hit', 1);
+    if (kills >= GOAL_KILLS){
+      state = STATE.WIN;
+      setUIVisibilityForState();
+      showCenter('…', `You killed ${GOAL_KILLS}.`, 'Press R to restart.');
+    }
+  }
+
+  function fireBullet(){
+    const speed = 760;
+    bullets.push({ x: player.x + player.facing * 24, v: player.facing * speed, life: 1.1 });
+  }
+
+  function tryMelee(){
+    if (state !== STATE.PLAY) return;
+    if (player.meleeCD > 0) return;
+    player.meleeCD = 0.26;
+    player.meleeAnim = 0.18;
+
+    const range = 75;
+    for (let i=mobs.length-1;i>=0;i--){
+      const dx = mobs[i].x - player.x;
+      if (Math.sign(dx) === player.facing && Math.abs(dx) <= range) killMob(i);
+    }
+  }
+
+  function tryRanged(){
+    if (state !== STATE.PLAY) return;
+    if (player.rangedCD > 0) return;
+    player.rangedCD = 0.68;
+    player.gunAnim = 0.22;
+    fireBullet();
+  }
+
+  function playerDies(){
+    if (state !== STATE.PLAY) return;
+
+    const beforeNL = prevNightmareLevel;
+    deaths++;
+
+    sfx('death', 1);
+
+    const nl = nightmareLevel();
+    if (nl > beforeNL){
+      // stage-up sound immediately on crossing 0->1, 1->2, etc.
+      sfx('nightmare_stage', 1 + nl*0.20);
+      prevNightmareLevel = nl;
+    }
+
+    world.shake = 1.0 + nl * 0.8;
+    world.glitch = 0.8 + nl * 0.25;
+
+    if (deaths >= MAX_DEATHS){
+      enterNoExit();
+      return;
+    }
+
+    resetAfterDeath();
+    setUIWhiteness(0);
+    updateHUD();
+  }
+
+  function enterNoExit(){
+    state = STATE.NO_EXIT;
+    setUIVisibilityForState();
+    mobs.length = 0;
+    bullets.length = 0;
+    kills = 0;
+    resetRunToEasy();
+    world.whiteness = 0;
+  }
+
+  function enterScreamer(){
+    state = STATE.SCREAMER;
+    setUIVisibilityForState();
+    sfx('screamer', 1.0);
+    world.tScreamer = 0;
+  }
+
+  function enterDeathLoop(){
+    state = STATE.DEATH_LOOP;
+    setUIVisibilityForState();
+    world.vignette = 0;
+    world.vignetteType = 0;
+    world.loopSpeed = 1;
+  }
+
+  function rnd(a,b){ return a + Math.random()*(b-a); }
+
+  function applyCameraShake(){
+    const nl = nightmareLevel();
+    const base = (state === STATE.PLAY) ? (0.8 + diffStep*0.35 + nl*0.65) : 0;
+    const extra = (state === STATE.DEATH_LOOP) ? (1.6 + Math.min(10, (deaths - MAX_DEATHS)*0.10)) : 0;
+    const s = (state === STATE.NO_EXIT) ? 0.25 : base + extra;
+
+    world.shake = clamp(world.shake*0.92 + s*0.08, 0, 18);
+    world.glitch = clamp(world.glitch*0.90 + (0.12 + nl*0.03 + diffStep*0.04 + (state===STATE.DEATH_LOOP?0.14:0)), 0, 7);
+
+    const mag = world.shake * (0.6 + Math.random()*0.6);
+    cam.x = (Math.random()*2-1) * mag;
+    cam.y = (Math.random()*2-1) * mag;
+  }
+
+  function drawBackground(){
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,W,H);
+    const t = world.t * 0.9;
+    const bands = 8;
+    for (let i=0;i<bands;i++){
+      const y = (i/bands) * H;
+      const a = 0.04 + 0.03*Math.sin(t*0.7 + i*1.9);
+      ctx.fillStyle = `rgba(255,0,0,${a})`;
+      ctx.fillRect(0, y, W, H/bands * 0.45);
+    }
+    const groundY = Math.floor(H*0.72);
+    ctx.fillStyle = 'rgba(120,0,0,0.18)';
+    ctx.fillRect(0, groundY, W, H-groundY);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    for (let y=0; y<H; y+= Math.floor(3*DPR)){
+      ctx.fillRect(0,y,W,1*DPR);
+    }
+  }
+
+  function drawNoExitFade(){
+    const w = world.whiteness;
+    if (w <= 0) return;
+    ctx.fillStyle = `rgba(255,255,255,${clamp(w,0,1)})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  function drawInterference(){
+    const g = world.glitch;
+    const nBlocks = Math.floor(3 + g*6);
+    for (let i=0;i<nBlocks;i++){
+      if (Math.random() < 0.50) continue;
+      const x = Math.random()*W;
+      const y = Math.random()*H;
+      const w = rnd(50, 260)*DPR;
+      const h = rnd(6, 46)*DPR;
+      ctx.fillStyle = `rgba(255,255,255,${rnd(0.02, 0.08)})`;
+      ctx.fillRect(x,y,w,h);
+    }
+  }
+
+  function drawGrain(){
+    const a = clamp((state===STATE.NO_EXIT?0.07:0.12) + nightmareLevel()*0.012 + (state===STATE.DEATH_LOOP?0.10:0), 0.06, 0.34);
+    const step = Math.floor(3*DPR);
+    ctx.fillStyle = `rgba(255,255,255,${a})`;
+    for (let y=0; y<H; y+=step){
+      for (let x=0; x<W; x+=step){
+        if (Math.random() < 0.12) ctx.fillRect(x,y,1*DPR,1*DPR);
+      }
+    }
+  }
+
+  // Player draw (reused in death loop too)
+  function drawPlayerAt(px, py, vx=0, facing=1, meleeAnim=0, gunAnim=0, t=0){
+    const bob = Math.sin(t*8) * 1.5*DPR;
+    const bodyH = 34*DPR, bodyW = 16*DPR;
+    const headR = 8*DPR;
+
+    ctx.fillStyle = 'rgba(255,0,0,0.10)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 8*DPR, 18*DPR, 6*DPR, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,80,80,0.88)';
+    ctx.lineWidth = 3*DPR;
+    const step = Math.sin(t*10) * 4*DPR * (Math.abs(vx)>5 ? 1:0.2);
+    ctx.beginPath();
+    ctx.moveTo(px-5*DPR, py);
+    ctx.lineTo(px-9*DPR, py+18*DPR+step);
+    ctx.moveTo(px+5*DPR, py);
+    ctx.lineTo(px+9*DPR, py+18*DPR-step);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,40,40,0.22)';
+    ctx.fillRect(px - bodyW/2, py - bodyH + bob, bodyW, bodyH);
+
+    ctx.strokeStyle = 'rgba(255,90,90,0.9)';
+    ctx.lineWidth = 3*DPR;
+    ctx.beginPath();
+    ctx.moveTo(px - bodyW/2, py - bodyH + 10*DPR + bob);
+    ctx.lineTo(px - bodyW/2 - 10*DPR, py - bodyH + 18*DPR + bob);
+    ctx.moveTo(px + bodyW/2, py - bodyH + 10*DPR + bob);
+    ctx.lineTo(px + bodyW/2 + 12*DPR, py - bodyH + 18*DPR + bob);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,40,40,0.28)';
+    ctx.beginPath();
+    ctx.arc(px, py - bodyH - headR + bob, headR, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,0,0,0.55)';
+    ctx.lineWidth = 2*DPR;
+    ctx.beginPath();
+    ctx.moveTo(px-3*DPR, py - bodyH - headR + bob);
+    ctx.lineTo(px+3*DPR, py - bodyH - headR + bob);
+    ctx.stroke();
+
+    if (meleeAnim > 0){
+      const p = meleeAnim / 0.18;
+      const arc = (1-p) * 1.3;
+      ctx.strokeStyle = `rgba(255,0,0,${0.25 + 0.35*p})`;
+      ctx.lineWidth = 4*DPR;
+      ctx.beginPath();
+      ctx.arc(px + facing*18*DPR, py - 18*DPR, 22*DPR, Math.PI*0.2 - arc, Math.PI*0.2 + arc);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255,150,150,0.9)';
+      ctx.lineWidth = 2*DPR;
+      ctx.beginPath();
+      ctx.moveTo(px + facing*24*DPR, py - 20*DPR);
+      ctx.lineTo(px + facing*34*DPR, py - 26*DPR);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = 'rgba(255,140,140,0.75)';
+      ctx.lineWidth = 2*DPR;
+      ctx.beginPath();
+      ctx.moveTo(px + facing*22*DPR, py - 20*DPR + bob);
+      ctx.lineTo(px + facing*34*DPR, py - 20*DPR + bob);
+      ctx.lineTo(px + facing*34*DPR, py - 16*DPR + bob);
+      ctx.stroke();
+    }
+
+    if (gunAnim > 0){
+      const p = gunAnim / 0.22;
+      ctx.fillStyle = `rgba(255,255,255,${0.12 + 0.18*p})`;
+      ctx.fillRect(px + facing*36*DPR, py - 22*DPR + bob, 10*DPR, 2*DPR);
+    }
+  }
+
+  function drawPlayer(screenX, groundY){
+    drawPlayerAt(screenX, groundY, player.vx, player.facing, player.meleeAnim, player.gunAnim, world.t);
+  }
+
+  function drawMob(m, screenX, groundY){
+    const nl = nightmareLevel();
+    const s = m.scale * DPR;
+    const jit = (Math.sin(world.t*12 + m.phase) * 1.2 + (Math.random()-0.5)*0.6) * DPR * (0.4 + m.deform);
+    const px = screenX + jit;
+    const py = groundY;
+
+    const h = (44 + 18*m.deform + diffStep*4) * s;
+    const w = (18 + 10*m.deform) * s;
+
+    ctx.fillStyle = 'rgba(255,0,0,0.10)';
+    ctx.beginPath();
+    ctx.ellipse(px, py + 10*DPR, (16 + 8*m.deform)*s, (5 + 3*m.deform)*s, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(255,0,0,${0.12 + 0.12*m.tint})`;
+    ctx.fillRect(px - w/2, py - h, w, h);
+
+    const headR = (10 + 6*m.deform) * s;
+    ctx.beginPath();
+    ctx.arc(px, py - h - headR*0.65, headR, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(255,80,80,${0.40 + 0.25*m.tint})`;
+    const ex = 4*s*(1+m.deform*0.6);
+    ctx.fillRect(px - ex - 2*s, py - h - headR*0.75, 3*s, 2*s);
+    ctx.fillRect(px + ex - 1*s, py - h - headR*0.75, 3*s, 2*s);
+
+    ctx.strokeStyle = `rgba(255,50,50,${0.45 + 0.15*m.tint})`;
+    ctx.lineWidth = 3*s;
+    ctx.beginPath();
+    ctx.moveTo(px - w/2, py - h + 14*s);
+    ctx.lineTo(px - w/2 - (12+18*m.deform)*s, py - h + (24+10*Math.sin(world.t*9+m.phase))*s);
+    ctx.moveTo(px + w/2, py - h + 14*s);
+    ctx.lineTo(px + w/2 + (12+18*m.deform)*s, py - h + (24+10*Math.cos(world.t*9+m.phase))*s);
+    ctx.stroke();
+
+    const spikes = Math.min(14, 4 + Math.floor(nl/1) + diffStep + Math.floor(m.deform*3));
+    ctx.strokeStyle = 'rgba(255,0,0,0.30)';
+    ctx.lineWidth = 2*s;
+    ctx.beginPath();
+    for (let i=0;i<spikes;i++){
+      const sx = px - w/2 + (i/(spikes-1))*w;
+      const sy = py - h + rnd(0, 10*s);
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(sx + rnd(-6,6)*s, sy - rnd(8,18)*s);
+    }
+    ctx.stroke();
+
+    ctx.strokeStyle = `rgba(255,80,80,${0.55})`;
+    ctx.lineWidth = 3*s;
+    const step = Math.sin(world.t*10 + m.phase) * 6*s;
+    ctx.beginPath();
+    ctx.moveTo(px - 4*s, py);
+    ctx.lineTo(px - 10*s, py + (18*s + step));
+    ctx.moveTo(px + 4*s, py);
+    ctx.lineTo(px + 10*s, py + (18*s - step));
+    ctx.stroke();
+  }
+
+  function drawBullets(){
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2*DPR;
+    for (const b of bullets){
+      const sx = (W*0.5) + (b.x - player.x)*DPR;
+      const gy = Math.floor(H*0.72);
+      ctx.beginPath();
+      ctx.moveTo(sx, gy - 24*DPR);
+      ctx.lineTo(sx - Math.sign(b.v)*10*DPR, gy - 24*DPR);
+      ctx.stroke();
+    }
+  }
+
+  function showCenter(title, body, sub=''){
+    centerText.style.display = 'flex';
+    centerTitle.textContent = title;
+    centerBody.textContent  = body;
+    centerSub.textContent   = sub;
+  }
+  function hideCenter(){ centerText.style.display = 'none'; }
+
+  // Colorful loop backdrops (same as previous, shortened for space but kept)
+  function drawDeathLoopBackdrop(type, intensity){
+    ctx.save();
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0,0,W,H);
+
+    const mid = H*0.58;
+
+    if (type === 0){
+      ctx.fillStyle = `rgba(10,30,50,0.95)`;
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = `rgba(20,60,40,${0.25 + 0.12*intensity})`;
+      for (let i=0;i<24;i++){
+        const x = (i/24)*W + (Math.sin(world.t*0.6 + i)*26)*DPR;
+        const w = rnd(10, 28)*DPR;
+        ctx.fillRect(x, mid - rnd(160,280)*DPR, w, rnd(260,520)*DPR);
+      }
+      ctx.fillStyle = `rgba(200,220,255,${0.06 + 0.06*intensity})`;
+      for (let i=0;i<6;i++){
+        const y = mid + i*18*DPR + Math.sin(world.t*2 + i)*6*DPR;
+        ctx.fillRect(0, y, W, 3*DPR);
+      }
+    }
+
+    if (type === 1){
+      ctx.fillStyle = `rgba(30,10,55,0.95)`;
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = `rgba(5,5,12,0.85)`;
+      for (let i=0;i<16;i++){
+        const bw = rnd(50,140)*DPR;
+        const bh = rnd(160, 420)*DPR;
+        const x = rnd(0, W-bw);
+        const y = mid - bh;
+        ctx.fillRect(x,y,bw,bh);
+        ctx.fillStyle = `rgba(255,210,120,${0.06 + 0.08*intensity})`;
+        for (let k=0;k<10;k++){
+          const wx = x + rnd(10, bw-16);
+          const wy = y + rnd(14, bh-14);
+          ctx.fillRect(wx, wy, 6*DPR, 4*DPR);
+        }
+        ctx.fillStyle = `rgba(5,5,12,0.85)`;
+      }
+      ctx.fillStyle = `rgba(160,70,255,${0.05 + 0.08*intensity})`;
+      ctx.fillRect(0, mid-4*DPR, W, 12*DPR);
+    }
+
+    if (type === 2){
+      ctx.fillStyle = `rgba(5,20,60,0.98)`;
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = `rgba(50,150,255,${0.10 + 0.08*intensity})`;
+      for (let i=0;i<12;i++){
+        const y = (mid + i*18*DPR) + Math.sin(world.t*2.4 + i)*7*DPR;
+        ctx.fillRect(0, y, W, 3*DPR);
+      }
+      ctx.fillStyle = `rgba(200,240,255,${0.03 + 0.05*intensity})`;
+      ctx.fillRect(0, mid-2*DPR, W, 3*DPR);
+    }
+    ctx.restore();
+  }
+
+  function drawDeathVignette(type, phase, intensity){
+    const cx = W*0.5 + cam.x*DPR;
+    const gy = H*0.74 + cam.y*DPR;
+
+    ctx.save();
+
+    if (type === 0){
+      const pull = phase * 120*DPR;
+
+      // draw full player (correct)
+      drawPlayerAt(cx-20*DPR, gy, 0, 1, 0, 0, world.t);
+
+      // entity silhouette
+      ctx.fillStyle = `rgba(0,0,0,${0.55 + 0.20*intensity})`;
+      ctx.beginPath();
+      ctx.ellipse(cx + 120*DPR - pull, gy-60*DPR, 70*DPR, 120*DPR, -0.2, 0, Math.PI*2);
+      ctx.fill();
+
+      // claws
+      ctx.strokeStyle = `rgba(255,30,30,${0.35 + 0.35*intensity})`;
+      ctx.lineWidth = 6*DPR;
+      ctx.beginPath();
+      ctx.moveTo(cx + 90*DPR - pull, gy - 50*DPR);
+      ctx.lineTo(cx + 24*DPR - pull, gy - 18*DPR);
+      ctx.lineTo(cx + 6*DPR  - pull, gy - 2*DPR);
+      ctx.stroke();
+
+      // blood pool
+      ctx.fillStyle = `rgba(180,0,0,${0.12 + 0.30*phase})`;
+      ctx.beginPath();
+      ctx.ellipse(cx-2*DPR, gy + 8*DPR, 46*DPR, 14*DPR, 0, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    if (type === 1){
+      const drop = phase * 300*DPR;
+      // falling player (full)
+      const y = (gy-140*DPR) + drop;
+      drawPlayerAt(cx, y, 0, 1, 0, 0, world.t);
+
+      if (phase > 0.82){
+        const p = (phase-0.82)/0.18;
+        ctx.fillStyle = `rgba(255,255,255,${0.06+0.24*p})`;
+        ctx.fillRect(0,0,W,H);
+      }
+    }
+
+    if (type === 2){
+      const sink = phase * 120*DPR;
+      ctx.fillStyle = `rgba(30,140,255,${0.06 + 0.10*intensity})`;
+      for (let i=0;i<9;i++){
+        const y = (H*0.60 + i*22*DPR) + Math.sin(world.t*4 + i)*6*DPR;
+        ctx.fillRect(0,y,W,2*DPR);
+      }
+      // sinking player (full)
+      drawPlayerAt(cx, (H*0.62)+sink+40*DPR, 0, 1, 0, 0, world.t);
+
+      ctx.fillStyle = `rgba(200,240,255,${0.03+0.12*phase})`;
+      ctx.fillRect(0,0,W,H);
+    }
+
+    ctx.restore();
+  }
+
+  function drawScreamerFace(t){
+    ctx.fillStyle = 'rgba(0,0,0,0.92)';
+    ctx.fillRect(0,0,W,H);
+
+    const cx = W*0.5, cy = H*0.48;
+    const pulse = 1 + Math.sin(t*26)*0.06;
+    const skew = Math.sin(t*18)*0.08;
+
+    for (let i=0;i<14;i++){
+      if (Math.random() < 0.65) continue;
+      const y = Math.random()*H;
+      ctx.fillStyle = `rgba(255,255,255,${0.02 + Math.random()*0.04})`;
+      ctx.fillRect(0, y, W, (2 + Math.random()*10)*DPR);
+    }
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(pulse, 1/pulse);
+    ctx.transform(1, skew, 0, 1, 0, 0);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    ctx.ellipse(0,0, 210*DPR, 240*DPR, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.beginPath();
+    ctx.ellipse(0, 10*DPR, 175*DPR, 210*DPR, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx.beginPath();
+    ctx.ellipse(-85*DPR, -35*DPR, 70*DPR, 40*DPR, -0.2, 0, Math.PI*2);
+    ctx.ellipse( 65*DPR, -42*DPR, 82*DPR, 48*DPR,  0.2, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,20,20,0.55)';
+    ctx.fillRect(-110*DPR, -45*DPR, 26*DPR, 16*DPR);
+    ctx.fillRect( 70*DPR,  -52*DPR, 30*DPR, 18*DPR);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.beginPath();
+    ctx.ellipse(0, 90*DPR, 110*DPR, 70*DPR, 0, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 3*DPR;
+    for (let i=-7;i<=7;i++){
+      ctx.beginPath();
+      ctx.moveTo(i*14*DPR, 55*DPR);
+      ctx.lineTo(i*10*DPR, 130*DPR);
+      ctx.stroke();
+    }
+
+    ctx.restore();
+
+    if (t > 0.45){
+      const p = clamp((t - 0.45) / 0.30, 0, 1);
+      ctx.fillStyle = `rgba(255,255,255,${0.03 + 0.10*p})`;
+      ctx.fillRect(0,0,W,H);
+    }
+  }
+
+  /* =========================
+     Update loop
+  ========================== */
+  let last = performance.now();
+
+  addEventListener('keydown', (e) => {
+    const k = keyNorm(e);
+    if (state === STATE.WIN && (k === 'KeyR' || e.key === 'r' || e.key === 'R')){
+      state = STATE.PLAY;
+      deaths = 0;
+      kills = 0;
+      prevNightmareLevel = 0;
+      resetAfterDeath();
+      setUIWhiteness(0);
+      hideCenter();
+      setUIVisibilityForState();
+      updateHUD();
+    }
+  }, { passive:false });
+
+  function tick(now){
+    const dt = Math.min(0.033, (now - last) / 1000);
+    last = now;
+    world.t += dt;
+    world.dt = dt;
+
+    if (soundOn){
+      ensureAudio();
+      if (state === STATE.PLAY){
+        const nl = nightmareLevel();
+        // louder baseline ambient
+        const amb = clamp(0.12 + diffStep*0.03 + nl*0.02, 0.10, 0.35);
+        setAmbientLevel(amb);
+        ambientFilter && (ambientFilter.frequency.value = 320 + diffStep*120 + nl*60);
+      } else if (state === STATE.NO_EXIT){
+        setAmbientLevel(0.08);
+      } else if (state === STATE.SCREAMER){
+        setAmbientLevel(0.0);
+      } else if (state === STATE.DEATH_LOOP){
+        setAmbientLevel(0.10);
+      } else {
+        setAmbientLevel(0.0);
+      }
+    }
+
+    if (state === STATE.PLAY) updatePlay(dt);
+    else if (state === STATE.NO_EXIT) updateNoExit(dt);
+    else if (state === STATE.SCREAMER) updateScreamer(dt);
+    else if (state === STATE.DEATH_LOOP) updateDeathLoop(dt);
+    else if (state === STATE.WIN) updateWin(dt);
+
+    render();
+    requestAnimationFrame(tick);
+  }
+
+  function updatePlay(dt){
+    // time steps still advance, but starting step already set by resetRunToEasy()
+    diffTimer += dt;
+    if (diffTimer >= diffStepSeconds){
+      diffTimer -= diffStepSeconds;
+      diffStep = Math.min(diffMaxStep, diffStep + 1);
+    }
+
+    const nl = nightmareLevel();
+    const sp = spawnParamsForNightmare(nl);
+
+    const stepMult = 1 + diffStep*0.25;
+
+    // spawn interval becomes extremely short at high nl
+    const baseInterval = spawnBaseInterval / (stepMult * (0.95 + nl*0.08));
+    const interval = clamp(baseInterval, 0.10, 1.20);
+
+    spawnAccum += dt;
+    const expected = spawnAccum / interval;
+    if (expected >= 1){
+      const bursts = Math.floor(expected);
+      spawnAccum -= bursts * interval;
+
+      for (let b=0;b<bursts;b++){
+        // Determine burst size based on nightmare level (mess at 3+)
+        const min = sp.burst.min;
+        const max = sp.burst.max;
+        let count = Math.floor(min + Math.random()*(max-min+1));
+
+        // Also add some extra at high diffStep
+        if (nl >= 2 && Math.random() < 0.45) count += 2;
+        if (nl >= 3 && Math.random() < 0.60) count += 4;
+
+        for (let i=0;i<count;i++) spawnMob();
+      }
+    }
+
+    const left  = keys.has('ArrowLeft') || keys.has('KeyA') || touchHold.left;
+    const right = keys.has('ArrowRight')|| keys.has('KeyD') || touchHold.right;
+
+    const speed = 260 + diffStep*12;
+    player.vx = 0;
+    if (left)  { player.vx = -speed; player.facing = -1; }
+    if (right) { player.vx =  speed; player.facing =  1; }
+    player.x += player.vx * dt;
+
+    player.meleeCD = Math.max(0, player.meleeCD - dt);
+    player.rangedCD= Math.max(0, player.rangedCD - dt);
+    player.meleeAnim = Math.max(0, player.meleeAnim - dt);
+    player.gunAnim   = Math.max(0, player.gunAnim   - dt);
+
+    for (let i=bullets.length-1;i>=0;i--){
+      const b = bullets[i];
+      b.x += b.v * dt;
+      b.life -= dt;
+      if (b.life <= 0) bullets.splice(i,1);
+    }
+
+    // collisions - at nl 3+ it's instant mess
+    const touchDist = (nl >= 3) ? 30 : 22;
+
+    for (let i=mobs.length-1;i>=0;i--){
+      const m = mobs[i];
+      const dir = Math.sign(player.x - m.x) || 1;
+      m.x += dir * m.speed * dt;
+      m.phase += dt * (2 + m.speed/120);
+
+      if (Math.abs(m.x - player.x) < touchDist){
+        playerDies();
+        return;
+      }
+
+      for (let j=bullets.length-1;j>=0;j--){
+        const b = bullets[j];
+        if (Math.abs(b.x - m.x) < 18){
+          bullets.splice(j,1);
+          killMob(i);
+          break;
+        }
+      }
+    }
+
+    setUIVisibilityForState();
+    updateHUD();
+  }
+
+  function updateNoExit(dt){
+    const left  = keys.has('ArrowLeft') || keys.has('KeyA') || touchHold.left;
+    const right = keys.has('ArrowRight')|| keys.has('KeyD') || touchHold.right;
+
+    const speed = 260;
+    player.vx = 0;
+    if (left)  { player.vx = -speed; player.facing = -1; }
+    if (right) { player.vx =  speed; player.facing =  1; }
+    player.x += player.vx * dt;
+
+    const dist = Math.abs(player.x);
+    world.whiteness = clamp(dist / 2000, 0, 1);
+    setUIWhiteness(world.whiteness);
+
+    const alpha = clamp(1 - world.whiteness*1.05, 0, 1);
+    if (alpha > 0.01){
+      centerText.style.display = 'flex';
+      centerTitle.textContent = 'right or left';
+      centerBody.textContent  = '';
+      centerSub.textContent   = '';
+      centerText.querySelector('.box').style.background = `rgba(0,0,0,${0.22*alpha})`;
+      centerText.querySelector('.box').style.borderColor = `rgba(255,255,255,${0.22*alpha})`;
+      centerTitle.style.opacity = alpha;
+    } else {
+      centerText.style.display = 'none';
+    }
+
+    if (world.whiteness >= 0.92 && dist > 2400){
+      enterScreamer();
+    }
+
+    setUIVisibilityForState();
+    updateHUD();
+  }
+
+  function updateScreamer(dt){
+    world.tScreamer += dt;
+    if (world.tScreamer > 0.75) enterDeathLoop();
+    setUIVisibilityForState();
+  }
+
+  function updateDeathLoop(dt){
+    loopDeathsEl.textContent = String(deaths);
+
+    const extra = Math.max(0, deaths - MAX_DEATHS);
+    world.loopSpeed = clamp(1 + extra*0.06, 1, 26);
+
+    const vignetteLen = 1.10 / world.loopSpeed;
+    world.vignette += dt;
+
+    if (world.vignette >= vignetteLen){
+      world.vignette -= vignetteLen;
+      world.vignetteType = (world.vignetteType + 1) % 3;
+      deaths++;
+      world.shake = clamp(world.shake + 0.55, 0, 20);
+      world.glitch = clamp(world.glitch + 0.10, 0, 7);
+      if (Math.random() < 0.30) sfx('death', 0.55);
+    }
+    setUIVisibilityForState();
+  }
+
+  function updateWin(dt){
+    world.glitch = clamp(world.glitch*0.98 + 0.08, 0, 2);
+    world.shake  = clamp(world.shake*0.98  + 0.10, 0, 3);
+    setUIVisibilityForState();
+    updateHUD();
+  }
+
+  function render(){
+    applyCameraShake();
+
+    if (state === STATE.DEATH_LOOP){
+      const intensity = clamp(0.5 + (deaths - MAX_DEATHS)*0.01, 0.5, 1.2);
+      drawDeathLoopBackdrop(world.vignetteType, intensity);
+
+      const vignetteLen = 1.10 / world.loopSpeed;
+      const phase = clamp(world.vignette / vignetteLen, 0, 1);
+      drawDeathVignette(world.vignetteType, phase, intensity);
+
+      drawInterference();
+      drawGrain();
+      return;
+    }
+
+    drawBackground();
+
+    ctx.save();
+    ctx.translate(cam.x*DPR, cam.y*DPR);
+
+    const groundY = Math.floor(H*0.72);
+    const centerX = W*0.5;
+
+    if (state === STATE.PLAY){
+      drawBullets();
+      for (const m of mobs){
+        const sx = centerX + (m.x - player.x)*DPR;
+        drawMob(m, sx, groundY);
+      }
+      drawPlayer(centerX, groundY);
+
+      const tint = 0.03 + diffStep*0.03 + nightmareLevel()*0.02;
+      ctx.fillStyle = `rgba(255,0,0,${tint})`;
+      ctx.fillRect(-cam.x*DPR,-cam.y*DPR,W,H);
+    }
+
+    if (state === STATE.NO_EXIT){
+      drawPlayer(centerX, groundY);
+    }
+
+    ctx.restore();
+
+    if (state === STATE.SCREAMER){
+      drawScreamerFace(world.tScreamer);
+      drawInterference();
+      drawGrain();
+      return;
+    }
+
+    if (state === STATE.NO_EXIT){
+      drawNoExitFade();
+      hud.style.opacity = String(clamp(1 - world.whiteness*0.9, 0.10, 1));
+    } else {
+      hud.style.opacity = '1';
+    }
+
+    drawInterference();
+    drawGrain();
+  }
+
+  // Intro
+  showCenter('NO EXIT', `Move left/right. Knife is fast. Gun is slower. One touch kills you.`, `Goal: kill ${GOAL_KILLS} in one run. Every death resets kills. Nightmare levels rewrite the rules.`);
+  setTimeout(() => { if (state === STATE.PLAY) hideCenter(); }, 2400);
+
+  // Init
+  resetRunToEasy(); // start according to nightmare level (0 => HARD, per request)
+  setUIVisibilityForState();
+  updateHUD();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
